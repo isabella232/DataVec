@@ -55,6 +55,55 @@ public class NumberedFileInputSplitTests {
         runNumberedFileInputSplitTest(baseString, minIdx, maxIdx);
     }
 
+    @Test(expected = IllegalArgumentException.class)
+    public void testNumberedFileInputSplitWithNoLeadingZeroInPadding() {
+        String baseString = "/path/to/files/prefix%5d.suffix";
+        int minIdx = 0;
+        int maxIdx = 10;
+        runNumberedFileInputSplitTest(baseString, minIdx, maxIdx);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNumberedFileInputSplitWithLeadingPlusInPadding() {
+        String baseString = "/path/to/files/prefix%+5d.suffix";
+        int minIdx = 0;
+        int maxIdx = 10;
+        runNumberedFileInputSplitTest(baseString, minIdx, maxIdx);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNumberedFileInputSplitWithLeadingMinusInPadding() {
+        String baseString = "/path/to/files/prefix%-5d.suffix";
+        int minIdx = 0;
+        int maxIdx = 10;
+        runNumberedFileInputSplitTest(baseString, minIdx, maxIdx);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNumberedFileInputSplitWithTwoDigitsInPadding() {
+        String baseString = "/path/to/files/prefix%011d.suffix";
+        int minIdx = 0;
+        int maxIdx = 10;
+        runNumberedFileInputSplitTest(baseString, minIdx, maxIdx);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNumberedFileInputSplitWithInnerZerosInPadding() {
+        String baseString = "/path/to/files/prefix%101d.suffix";
+        int minIdx = 0;
+        int maxIdx = 10;
+        runNumberedFileInputSplitTest(baseString, minIdx, maxIdx);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNumberedFileInputSplitWithRepeatInnerZerosInPadding() {
+        String baseString = "/path/to/files/prefix%0505d.suffix";
+        int minIdx = 0;
+        int maxIdx = 10;
+        runNumberedFileInputSplitTest(baseString, minIdx, maxIdx);
+    }
+
+
     private static void runNumberedFileInputSplitTest(String baseString, int minIdx, int maxIdx) {
         NumberedFileInputSplit split = new NumberedFileInputSplit(baseString, minIdx, maxIdx);
         URI[] locs = split.locations();
