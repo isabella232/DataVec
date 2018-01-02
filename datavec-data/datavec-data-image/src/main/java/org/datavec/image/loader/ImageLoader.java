@@ -16,22 +16,21 @@
 
 package org.datavec.image.loader;
 
-import com.github.jaiimageio.impl.plugins.tiff.TIFFImageReaderSpi;
-import com.github.jaiimageio.impl.plugins.tiff.TIFFImageWriterSpi;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 import org.nd4j.linalg.util.ArrayUtil;
 import org.nd4j.linalg.util.NDArrayUtil;
 
-import javax.imageio.ImageIO;
-import javax.imageio.spi.IIORegistry;
-import java.awt.*;
-import java.awt.image.BufferedImage;
-import java.awt.image.DataBufferByte;
-import java.awt.image.Raster;
-import java.awt.image.WritableRaster;
 import java.io.*;
-import java.util.Arrays;
+import java.nio.ByteBuffer;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelFormat;
+import javafx.scene.image.PixelReader;
+import javafx.scene.image.PixelWriter;
+import javafx.scene.image.WritableImage;
+import javafx.scene.image.WritablePixelFormat;
+import javafx.scene.paint.Color;
 
 /**
  * Image loader for taking images
@@ -40,19 +39,6 @@ import java.util.Arrays;
  *
  */
 public class ImageLoader extends BaseImageLoader {
-
-    static {
-        ImageIO.scanForPlugins();
-        IIORegistry registry = IIORegistry.getDefaultInstance();
-        registry.registerServiceProvider(new TIFFImageWriterSpi());
-        registry.registerServiceProvider(new TIFFImageReaderSpi());
-        registry.registerServiceProvider(new com.twelvemonkeys.imageio.plugins.jpeg.JPEGImageReaderSpi());
-        registry.registerServiceProvider(new com.twelvemonkeys.imageio.plugins.jpeg.JPEGImageWriterSpi());
-        registry.registerServiceProvider(new com.twelvemonkeys.imageio.plugins.psd.PSDImageReaderSpi());
-        registry.registerServiceProvider(Arrays.asList(new com.twelvemonkeys.imageio.plugins.bmp.BMPImageReaderSpi(),
-                        new com.twelvemonkeys.imageio.plugins.bmp.CURImageReaderSpi(),
-                        new com.twelvemonkeys.imageio.plugins.bmp.ICOImageReaderSpi()));
-    }
 
     public ImageLoader() {
         super();
@@ -106,17 +92,14 @@ public class ImageLoader extends BaseImageLoader {
      * @return the flattened image
      * @throws IOException
      */
+    @Override
     public INDArray asRowVector(File f) throws IOException {
-        return asRowVector(ImageIO.read(f));
-        //        if(channels == 3) {
-        //            return toRaveledTensor(f);
-        //        }
-        //        return NDArrayUtil.toNDArray(flattenedImageFromFile(f));
+        return asRowVector(new Image(f.toURI().toString()));
     }
 
+    @Override
     public INDArray asRowVector(InputStream inputStream) throws IOException {
-        return asRowVector(ImageIO.read(inputStream));
-        //        return asMatrix(inputStream).ravel();
+        return asRowVector(new Image(inputStream));
     }
 
     /**
@@ -125,7 +108,7 @@ public class ImageLoader extends BaseImageLoader {
      * @return the row vector based on a rastered
      * representation of the image
      */
-    public INDArray asRowVector(BufferedImage image) {
+    public INDArray asRowVector(Image image) {
         if (centerCropIfNeeded) {
             image = centerCropIfNeeded(image);
         }
@@ -145,9 +128,7 @@ public class ImageLoader extends BaseImageLoader {
      */
     public INDArray toRaveledTensor(File file) {
         try {
-            BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-            INDArray ret = toRaveledTensor(bis);
-            bis.close();
+            INDArray ret = toRaveledTensor(new FileInputStream(file));
             return ret.ravel();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -170,7 +151,7 @@ public class ImageLoader extends BaseImageLoader {
      * @param image the image to parse
      * @return the raveled tensor of bgr values
      */
-    public INDArray toRaveledTensor(BufferedImage image) {
+    public INDArray toRaveledTensor(Image image) {
         try {
             image = scalingIfNeed(image, false);
             return toINDArrayBGR(image).ravel();
@@ -187,9 +168,7 @@ public class ImageLoader extends BaseImageLoader {
      */
     public INDArray toBgr(File file) {
         try {
-            BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-            INDArray ret = toBgr(bis);
-            bis.close();
+            INDArray ret = toBgr(new FileInputStream(file));
             return ret;
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -203,31 +182,23 @@ public class ImageLoader extends BaseImageLoader {
      * @return the input stream to convert
      */
     public INDArray toBgr(InputStream inputStream) {
-        try {
-            BufferedImage image = ImageIO.read(inputStream);
-            return toBgr(image);
-        } catch (IOException e) {
-            throw new RuntimeException("Unable to load image", e);
-        }
+        return toBgr(new Image(inputStream));
     }
 
     private org.datavec.image.data.Image toBgrImage(InputStream inputStream){
-        try {
-            BufferedImage image = ImageIO.read(inputStream);
-            INDArray img = toBgr(image);
-            return new org.datavec.image.data.Image(img, image.getData().getNumBands(), image.getHeight(), image.getWidth());
-        } catch (IOException e) {
-            throw new RuntimeException("Unable to load image", e);
-        }
+        Image image = new Image(inputStream);
+        INDArray img = toBgr(image);
+        int bands = getNumBands(image.getPixelReader());
+        return new org.datavec.image.data.Image(img, bands, (int) image.getHeight(), (int) image.getWidth());
     }
 
     /**
-     * Convert an BufferedImage to an bgr spectrum image
+     * Convert an Image to an bgr spectrum image
      *
-     * @param image the BufferedImage to convert
+     * @param image the Image to convert
      * @return the input stream to convert
      */
-    public INDArray toBgr(BufferedImage image) {
+    public INDArray toBgr(Image image) {
         if (image == null)
             throw new IllegalStateException("Unable to load image");
         image = scalingIfNeed(image, false);
@@ -241,6 +212,7 @@ public class ImageLoader extends BaseImageLoader {
      * @return a 2d matrix of a rastered version of the image
      * @throws IOException
      */
+    @Override
     public INDArray asMatrix(File f) throws IOException {
         return NDArrayUtil.toNDArray(fromFile(f));
     }
@@ -250,15 +222,13 @@ public class ImageLoader extends BaseImageLoader {
      * @param inputStream the input stream to convert
      * @return the input stream to convert
      */
-    public INDArray asMatrix(InputStream inputStream) throws IOException {
-        if (channels == 3)
+    @Override
+    public INDArray asMatrix(InputStream inputStream) {
+        if (channels == 3) {
             return toBgr(inputStream);
-        try {
-            BufferedImage image = ImageIO.read(inputStream);
-            return asMatrix(image);
-        } catch (IOException e) {
-            throw new IOException("Unable to load image", e);
         }
+        Image image = new Image(inputStream);
+        return asMatrix(image);
     }
 
     @Override
@@ -270,34 +240,32 @@ public class ImageLoader extends BaseImageLoader {
 
     @Override
     public org.datavec.image.data.Image asImageMatrix(InputStream inputStream) throws IOException {
-        if (channels == 3)
+        if (channels == 3) {
             return toBgrImage(inputStream);
-        try {
-            BufferedImage image = ImageIO.read(inputStream);
-            INDArray asMatrix = asMatrix(image);
-            return new org.datavec.image.data.Image(asMatrix, image.getData().getNumBands(), image.getHeight(), image.getWidth());
-        } catch (IOException e) {
-            throw new IOException("Unable to load image", e);
         }
+        Image image = new Image(inputStream);
+        INDArray asMatrix = asMatrix(image);
+        return new org.datavec.image.data.Image(asMatrix, getNumBands(image.getPixelReader()), (int) image.getHeight(), (int) image.getWidth());
     }
 
     /**
-     * Convert an BufferedImage to a matrix
-     * @param image the BufferedImage to convert
+     * Convert an Image to a matrix
+     * @param image the Image to convert
      * @return the input stream to convert
      */
-    public INDArray asMatrix(BufferedImage image) {
+    public INDArray asMatrix(Image image) {
         if (channels == 3) {
             return toBgr(image);
         } else {
             image = scalingIfNeed(image, true);
-            int w = image.getWidth();
-            int h = image.getHeight();
+            int w = (int) image.getWidth();
+            int h = (int) image.getHeight();
             INDArray ret = Nd4j.create(h, w);
 
+            PixelReader reader = image.getPixelReader();
             for (int i = 0; i < h; i++) {
                 for (int j = 0; j < w; j++) {
-                    ret.putScalar(new int[] {i, j}, image.getRGB(j, i));
+                    ret.putScalar(new int[] {i, j}, reader.getArgb(j, i));
                 }
             }
             return ret;
@@ -316,7 +284,7 @@ public class ImageLoader extends BaseImageLoader {
         try {
             INDArray d = asMatrix(f);
             return Nd4j.create(numMiniBatches, numRowsPerSlice, d.columns());
-        } catch (Exception e) {
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
@@ -332,7 +300,7 @@ public class ImageLoader extends BaseImageLoader {
      * @throws IOException
      */
     public int[][] fromFile(File file) throws IOException {
-        BufferedImage image = ImageIO.read(file);
+        Image image = new Image(file.toURI().toString());
         image = scalingIfNeed(image, true);
         return toIntArrayArray(image);
     }
@@ -344,14 +312,17 @@ public class ImageLoader extends BaseImageLoader {
      * @throws IOException
      */
     public int[][][] fromFileMultipleChannels(File file) throws IOException {
-        BufferedImage image = ImageIO.read(file);
+        Image image = new Image(file.toURI().toString());
         image = scalingIfNeed(image, channels > 3);
 
-        int w = image.getWidth(), h = image.getHeight();
-        int bands = image.getSampleModel().getNumBands();
+        int w = (int) image.getWidth();
+        int h = (int) image.getHeight();
+        PixelReader reader = image.getPixelReader();
+        int bands = getNumBands(reader);
         int[][][] ret = new int[channels][h][w];
-        byte[] pixels = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
-
+        byte[] pixels = new byte[w * h * bands];
+        reader.getPixels(0, 0, w, h, (WritablePixelFormat<ByteBuffer>) reader.getPixelFormat(), pixels, 0, w * bands);
+        
         for (int i = 0; i < h; i++) {
             for (int j = 0; j < w; j++) {
                 for (int k = 0; k < channels; k++) {
@@ -367,18 +338,17 @@ public class ImageLoader extends BaseImageLoader {
     /**
      * Convert a matrix in to a buffereed image
      * @param matrix the
-     * @return {@link java.awt.image.BufferedImage}
+     * @return {@link Image}
      */
-    public static BufferedImage toImage(INDArray matrix) {
-        BufferedImage img = new BufferedImage(matrix.rows(), matrix.columns(), BufferedImage.TYPE_INT_ARGB);
-        WritableRaster r = img.getRaster();
-        int[] equiv = new int[matrix.length()];
-        for (int i = 0; i < equiv.length; i++) {
-            equiv[i] = (int) matrix.getDouble(i);
+    public static Image toImage(INDArray matrix) {
+        WritableImage writableImage = new WritableImage(matrix.rows(), matrix.columns());
+        PixelWriter pixelWriter = writableImage.getPixelWriter();
+        for (int i = 0; i < matrix.rows(); i++) {
+            for (int j = 0; j < matrix.columns(); j++) {
+                pixelWriter.setArgb(j, i, (int) matrix.getDouble(j + i * matrix.columns()));
+            }
         }
-
-        r.setDataElements(0, 0, matrix.rows(), matrix.columns(), equiv);
-        return img;
+        return writableImage;
     }
 
 
@@ -394,11 +364,13 @@ public class ImageLoader extends BaseImageLoader {
      * @param arr the array to use
      * @param image the image to set
      */
-    public void toBufferedImageRGB(INDArray arr, BufferedImage image) {
+    public void toImageRGB(INDArray arr, Image image) {
         if (arr.rank() < 3)
             throw new IllegalArgumentException("Arr must be 3d");
 
         image = scalingIfNeed(image, arr.size(-2), arr.size(-1), true);
+        WritableImage writableImage = new WritableImage(image.getPixelReader(), width,  height);
+        PixelWriter pixelWriter = writableImage.getPixelWriter();
         for (int i = 0; i < image.getWidth(); i++) {
             for (int j = 0; j < image.getHeight(); j++) {
                 int r = arr.slice(0).getInt(i, j);
@@ -406,76 +378,65 @@ public class ImageLoader extends BaseImageLoader {
                 int b = arr.slice(2).getInt(i, j);
                 int a = 1;
                 int col = (a << 24) | (r << 16) | (g << 8) | b;
-                image.setRGB(i, j, col);
+                pixelWriter.setArgb(i, j, col);
             }
         }
+        image = writableImage;
     }
 
-    /**
-     * Converts a given Image into a BufferedImage
-     *
-     * @param img The Image to be converted
-     * @param type The color model of BufferedImage
-     * @return The converted BufferedImage
-     */
-    public static BufferedImage toBufferedImage(Image img, int type) {
-        if (img instanceof BufferedImage) {
-            return (BufferedImage) img;
-        }
-
-        // Create a buffered image with transparency
-        BufferedImage bimage = new BufferedImage(img.getWidth(null), img.getHeight(null), type);
-
-        // Draw the image on to the buffered image
-        Graphics2D bGr = bimage.createGraphics();
-        bGr.drawImage(img, 0, 0, null);
-        bGr.dispose();
-
-        // Return the buffered image
-        return bimage;
-    }
-
-    protected int[][] toIntArrayArray(BufferedImage image) {
-        int w = image.getWidth(), h = image.getHeight();
+    protected int[][] toIntArrayArray(Image image) {
+        int w = (int) image.getWidth(), h = (int) image.getHeight();
         int[][] ret = new int[h][w];
-        if (image.getRaster().getNumDataElements() == 1) {
-            Raster raster = image.getRaster();
-            for (int i = 0; i < h; i++) {
-                for (int j = 0; j < w; j++) {
-                    ret[i][j] = raster.getSample(j, i, 0);
-                }
-            }
-        } else {
-            for (int i = 0; i < h; i++) {
-                for (int j = 0; j < w; j++) {
-                    ret[i][j] = image.getRGB(j, i);
-                }
+        PixelReader pixelReader = image.getPixelReader();
+        for (int i = 0; i < h; i++) {
+            for (int j = 0; j < w; j++) {
+                ret[i][j] = pixelReader.getArgb(j, i);
             }
         }
         return ret;
     }
 
-    protected INDArray toINDArrayBGR(BufferedImage image) {
-        int height = image.getHeight();
-        int width = image.getWidth();
-        int bands = image.getSampleModel().getNumBands();
+    protected INDArray toINDArrayBGR(Image image) {
+        int height = (int) image.getHeight();
+        int width = (int) image.getWidth();
+        final PixelReader pixelReader = image.getPixelReader();
+        int bands = getNumBands(pixelReader);
 
-        byte[] pixels = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
+        byte[] pixels = new byte[width * height * bands];
+        final WritablePixelFormat<ByteBuffer> format = (WritablePixelFormat<ByteBuffer>) pixelReader.getPixelFormat();
+        pixelReader.getPixels(0, 0, width, height, format, pixels, 0, width * bands);
         int[] shape = new int[] {height, width, bands};
-
+        
         INDArray ret2 = Nd4j.create(1, pixels.length);
-        for (int i = 0; i < ret2.length(); i++) {
+        for (int i = 0; i < ret2.length(); i += 4) {
             ret2.putScalar(i, ((int) pixels[i]) & 0xFF);
+            ret2.putScalar(i, ((int) pixels[i + 1]) & 0xFF);
+            ret2.putScalar(i, ((int) pixels[i + 2]) & 0xFF);
+            ret2.putScalar(i, ((int) pixels[i + 3]) & 0xFF);
         }
+        
+        if (format.getType() == PixelFormat.Type.BYTE_BGRA_PRE || format.getType() == PixelFormat.Type.BYTE_BGRA) {
+            for (int i = 0; i < ret2.length(); i += 4) {
+                ret2.putScalar(i + 0, ((int) pixels[i + 3]) & 0xFF);
+                ret2.putScalar(i + 1, ((int) pixels[i + 0]) & 0xFF);
+                ret2.putScalar(i + 2, ((int) pixels[i + 1]) & 0xFF);
+                ret2.putScalar(i + 3, ((int) pixels[i + 2]) & 0xFF);
+            }
+        } else {
+            for (int i = 0; i < ret2.length(); i++) {
+                ret2.putScalar(i, ((int) pixels[i]) & 0xFF);
+            }
+        }
+            
         return ret2.reshape(shape).permute(2, 0, 1);
     }
 
     // TODO build flexibility on where to crop the image
-    public BufferedImage centerCropIfNeeded(BufferedImage img) {
+    public Image centerCropIfNeeded(Image img) {
         int x = 0;
         int y = 0;
-        int height = img.getHeight();
-        int width = img.getWidth();
+        int height = (int) img.getHeight();
+        int width = (int) img.getWidth();
         int diff = Math.abs(width - height) / 2;
 
         if (width > height) {
@@ -485,37 +446,46 @@ public class ImageLoader extends BaseImageLoader {
             y = diff;
             height = height - diff;
         }
-        return img.getSubimage(x, y, width, height);
+        PixelReader pixelReader = img.getPixelReader();
+        WritableImage writableImage = new WritableImage(width,  height);
+        PixelWriter pixelWriter = writableImage.getPixelWriter();
+        for (int i = x; i < width; i++) {
+            for (int j = y; j < height; j++) {
+                Color color = pixelReader.getColor(i, j);
+                pixelWriter.setColor(i, j, color);
+            }
+        }
+        return writableImage;
     }
 
-    protected BufferedImage scalingIfNeed(BufferedImage image, boolean needAlpha) {
+    protected Image scalingIfNeed(Image image, boolean needAlpha) {
         return scalingIfNeed(image, height, width, needAlpha);
     }
 
-    protected BufferedImage scalingIfNeed(BufferedImage image, int dstHeight, int dstWidth, boolean needAlpha) {
+    protected Image scalingIfNeed(Image image, int dstHeight, int dstWidth, boolean needAlpha) {
         if (dstHeight > 0 && dstWidth > 0 && (image.getHeight() != dstHeight || image.getWidth() != dstWidth)) {
-            Image scaled = image.getScaledInstance(dstWidth, dstHeight, Image.SCALE_SMOOTH);
-
-            if (needAlpha && image.getColorModel().hasAlpha() && channels == BufferedImage.TYPE_4BYTE_ABGR) {
-                return toBufferedImage(scaled, BufferedImage.TYPE_4BYTE_ABGR);
-            } else {
-                if (channels == BufferedImage.TYPE_BYTE_GRAY)
-                    return toBufferedImage(scaled, BufferedImage.TYPE_BYTE_GRAY);
-                else
-                    return toBufferedImage(scaled, BufferedImage.TYPE_3BYTE_BGR);
-            }
+            ImageView dummyImageView = new ImageView(image);
+//            dummyImageView.setPreserveRatio(true);
+            dummyImageView.setFitWidth(dstWidth);
+            dummyImageView.setFitHeight(dstHeight);
+            dummyImageView.setSmooth(true);
+            return dummyImageView.snapshot(null, null);
         } else {
-            if (image.getType() == BufferedImage.TYPE_4BYTE_ABGR || image.getType() == BufferedImage.TYPE_3BYTE_BGR) {
-                return image;
-            } else if (needAlpha && image.getColorModel().hasAlpha() && channels == BufferedImage.TYPE_4BYTE_ABGR) {
-                return toBufferedImage(image, BufferedImage.TYPE_4BYTE_ABGR);
-            } else {
-                if (channels == BufferedImage.TYPE_BYTE_GRAY)
-                    return toBufferedImage(image, BufferedImage.TYPE_BYTE_GRAY);
-                else
-                    return toBufferedImage(image, BufferedImage.TYPE_3BYTE_BGR);
-            }
+            return image;
         }
     }
 
+    protected int getNumBands(PixelReader reader) {
+        if (reader == null || reader.getPixelFormat() == null) {
+            return 0;
+        }
+        switch (reader.getPixelFormat().getType()) {
+            case INT_ARGB:
+            case INT_ARGB_PRE:
+            case BYTE_BGRA:
+            case BYTE_BGRA_PRE: 
+            case BYTE_INDEXED: return 4;
+            default: return 3;
+        }
+    }
 }

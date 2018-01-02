@@ -35,6 +35,8 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import javafx.embed.swing.SwingFXUtils;
+import javafx.scene.image.Image;
 
 /**
  * Codec record reader for parsing:
@@ -91,10 +93,11 @@ public class CodecRecordReader extends BaseCodecRecordReader {
             for (int i = startFrame; i < startFrame + numFrames; i++) {
                 try {
                     BufferedImage grab = fg.getFrame();
+                    Image grabFX = SwingFXUtils.toFXImage(grab, null);
                     if (ravel)
-                        record.add(RecordConverter.toRecord(imageLoader.toRaveledTensor(grab)));
+                        record.add(RecordConverter.toRecord(imageLoader.toRaveledTensor(grabFX)));
                     else
-                        record.add(RecordConverter.toRecord(imageLoader.asRowVector(grab)));
+                        record.add(RecordConverter.toRecord(imageLoader.asRowVector(grabFX)));
 
                 } catch (Exception e) {
                     throw new RuntimeException(e);
@@ -109,10 +112,11 @@ public class CodecRecordReader extends BaseCodecRecordReader {
                 for (double i = 0; i < videoLength; i += framesPerSecond) {
                     try {
                         BufferedImage grab = FrameGrab.getFrame(seekableByteChannel, i);
+                        Image grabFX = SwingFXUtils.toFXImage(grab, null);
                         if (ravel)
-                            record.add(RecordConverter.toRecord(imageLoader.toRaveledTensor(grab)));
+                            record.add(RecordConverter.toRecord(imageLoader.toRaveledTensor(grabFX)));
                         else
-                            record.add(RecordConverter.toRecord(imageLoader.asRowVector(grab)));
+                            record.add(RecordConverter.toRecord(imageLoader.asRowVector(grabFX)));
 
                     } catch (Exception e) {
                         throw new RuntimeException(e);
